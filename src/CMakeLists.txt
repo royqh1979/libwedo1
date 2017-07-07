@@ -1,0 +1,7 @@
+set(LIBWEDO1_SRC wedo1.c)
+set(TESTWEDO1_SRC test.c)
+add_library(wedo1 ${LIBWEDO1_SRC})
+add_executable(testwedo1 ${TESTWEDO1_SRC})
+add_dependencies(testwedo1 wedo1)
+target_link_libraries(wedo1 usb-1.0)
+target_link_libraries(testwedo1 wedo1 usb-1.0)
