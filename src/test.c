@@ -10,18 +10,25 @@ int main() {
     rc=wedo_init();
     printf("init:%d\n",rc);
     //printf("dis:%d\n",wedo_get_distance());
-    rc=wedo_start_mortor(100);
-    printf("motor:%d\n",rc);
+    rc=wedo_start_mortor(-100);
+    printf("start motor:%d\n",rc);
+    Sleep(2000);
+    rc=wedo_light_on();
+    Sleep(2000);
+    rc=wedo_light_off();
+    Sleep(2000);
+    rc=wedo_light_on();
+    Sleep(2000);
+    rc=wedo_stop_mortor();
     //Sleep(5000);
     //rc=wedo_stop_mortor();
     //printf("init:%d\n",rc);
     for (int i=0;i<10;i++) {
-        //printf("dis:%d\n",wedo_get_distance());
-        //printf("tilt:%d\n",wedo_get_tilt());
-        wedo_start_mortor(wedo_get_distance());
+        printf("dis:%d\n",wedo_get_distance());
+        printf("tilt:%d\n",wedo_get_tilt());
+        //wedo_start_mortor(wedo_get_distance());
         Sleep(1000);
     }
-    wedo_stop_mortor();
     wedo_close();
     return 0;
 }

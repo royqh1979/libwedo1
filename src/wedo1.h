@@ -84,6 +84,9 @@ int wedo_stop_mortor_b();
 int wedo_get_tilt();
 int wedo_get_distance();
 
+int wedo_light_on();
+int wedo_light_off();
+
 /*
 int wedo_run_mortor(int power,int second);
 int wedo_run_mortor_until_tilt();

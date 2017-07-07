@@ -14,16 +14,22 @@
 
 const int TILTSENSOR[] = {38, 39, -1};
 const int DISTANCESENSOR[] = {176, 177, 178, 179, -1};
-const int MOTORS[] = {238,231,237,239, -1};
-const int LIGHTS[] = {203,-1};
-
+const int MOTORS[] = {238,231,237,239,240,230,-1};
+const int LIGHTS[] = {203,204,-1};
+enum connect_type{
+    TILT_SENSOR,
+    DISTANCE_SENSOR,
+    MOTOR,
+    LIGHT,
+    NONE_CONNECT
+};
 typedef struct {
     struct libusb_device_handle *pHub;
     struct libusb_device *pHubDevice;
     int powerA;
     int powerB;
-    boolean motor_A_connected;
-    boolean motor_B_connected;
+    enum connect_type A_connection_type;
+    enum connect_type B_connection_type;
     volatile int distance;
     volatile int tilt;
     HANDLE hPollThread;
@@ -33,7 +39,7 @@ typedef struct {
 static WEDO_HANDLE *pWedo = NULL;
 static volatile int do_exit=0;
 
-static void __wedo_check_motors();
+static void __wedo_check_powers();
 
 static void __wedo_init_data() {
     pWedo = (WEDO_HANDLE *) malloc(sizeof(WEDO_HANDLE));
@@ -41,8 +47,8 @@ static void __wedo_init_data() {
     pWedo->pHubDevice=NULL;
     pWedo->powerA=0;
     pWedo->powerB=0;
-    pWedo->motor_A_connected=false;
-    pWedo->motor_B_connected=false;
+    pWedo->A_connection_type=NONE_CONNECT;
+    pWedo->B_connection_type=NONE_CONNECT;
     pWedo->hPollThread=NULL;
     pWedo->tilt=0;
     pWedo->distance=1000;
@@ -100,8 +106,9 @@ static void __wedo_get_tilt(const int ids[],const int datas[]) {
         pWedo->tilt=WEDO_TILT_FORWARD;
     } else if (220 <= code && code <= 240) {
         pWedo->tilt=WEDO_TILT_LEFT;
+    } else {
+        pWedo->tilt = WEDO_TILT_NONE;
     }
-    pWedo->tilt=WEDO_TILT_NONE;
 };
 
 static void __wedo_get_distance(const int ids[],const int datas[]) {
@@ -132,6 +139,7 @@ static void LIBUSB_CALL __wedo_transfer_cb(struct libusb_transfer *transfer)
             datas[1]=transfer->buffer[i+4];
             __wedo_get_tilt(ids,datas);
             __wedo_get_distance(ids,datas);
+            //printf("%d:%d %d:%d\n",ids[0],datas[0],ids[1],datas[1]);
             i+=9;
         } while(i<transfer->actual_length);
     }
@@ -159,7 +167,7 @@ int wedo_init() {
     }
     pWedo->pHubDevice=libusb_get_device(pWedo->pHub);
     libusb_set_configuration(pWedo->pHub, WEDO_CONFIGURATION);
-    __wedo_check_motors();
+    __wedo_check_powers();
     pWedo->hPollThread=CreateThread(NULL,0,__wedo_poll_thread_func,NULL,0,&dwPollThread);
     pWedo->pTransfer=libusb_alloc_transfer(0);
     libusb_fill_bulk_transfer(pWedo->pTransfer,pWedo->pHub,0x81,pWedo->buffer,
@@ -176,8 +184,22 @@ static boolean __wedo_in_list(const int id, const int idList[]) {
     }
     return false;
 }
-
-static void __wedo_check_motors() {
+static enum connect_type __wedo_check_connection_type(int id) {
+    if (__wedo_in_list(id, TILTSENSOR)){
+        return TILT_SENSOR;
+    }
+    if (__wedo_in_list(id, DISTANCESENSOR)){
+        return DISTANCE_SENSOR;
+    }
+    if (__wedo_in_list(id, MOTORS)){
+        return MOTOR;
+    }
+    if (__wedo_in_list(id, LIGHTS)){
+        return LIGHT;
+    }
+    return NONE_CONNECT;
+}
+static void __wedo_check_powers() {
     unsigned char recv_data[8];
     int recv_len;
     int rc;
@@ -187,12 +209,10 @@ static void __wedo_check_motors() {
         return;
     }
     //printf("test:%d %d\n",recv_data[3],recv_data[5]);
-    if (__wedo_in_list(recv_data[3],MOTORS)) {
-        pWedo->motor_A_connected=true;
-    }
-    if (__wedo_in_list(recv_data[5],MOTORS)){
-        pWedo->motor_B_connected=true;
-    }
+    pWedo->A_connection_type=__wedo_check_connection_type(recv_data[3]);
+    pWedo->B_connection_type=__wedo_check_connection_type(recv_data[5]);
+    //printf("%d %d\n",pWedo->A_connection_type,pWedo->B_connection_type);
+
 
 }
 
@@ -202,6 +222,7 @@ void wedo_close() {
     }
     __wedo_request_exit(1);
     wedo_stop_mortor();
+    wedo_light_off();
     libusb_close(pWedo->pHub);
     free(pWedo);
     pWedo = NULL;
@@ -227,25 +248,25 @@ static int __wedo_normalize_motor_power(int value) {
     return value;
 }
 
-static int __wedo_start_mortor(int valueA, int valueB) {
+static int __wedo_set_power(int powerA, int powerB) {
     unsigned char send_data[8];
     int send_len;
     if (pWedo == NULL || pWedo->pHub == NULL) {
         return 0;
     }
     memset(send_data, 0, sizeof(send_data));
-    pWedo->powerA = __wedo_normalize_motor_power(valueA);
-    pWedo->powerB = __wedo_normalize_motor_power(valueB);
     libusb_claim_interface(pWedo->pHub, 0);
+    pWedo->powerA=powerA;
+    pWedo->powerB=powerB;
     send_data[0] = 0x40;
-    send_data[1] = pWedo->motor_A_connected ? pWedo->powerA & 0xFF : 0;
-    send_data[2] = pWedo->motor_B_connected ? pWedo->powerB & 0xFF : 0;
+    send_data[1] = powerA & 0xFF;
+    send_data[2] = powerB & 0xFF;
     //printf("%d %d\n",send_data[1],send_data[2]);
     send_len = libusb_control_transfer(pWedo->pHub,
-                               0x21 ,
-                               0x09 ,
-                               0x0200 ,
-                               0, send_data, sizeof(send_data), 0);
+                                       0x21 ,
+                                       0x09 ,
+                                       0x0200 ,
+                                       0, send_data, sizeof(send_data), 0);
     if (send_len < sizeof(send_data)) {
         return -1;
     }
@@ -253,28 +274,37 @@ static int __wedo_start_mortor(int valueA, int valueB) {
     return 0;
 }
 
+static int __wedo_set_motor(int valueA, int valueB) {
+    if (pWedo==NULL) {
+        return -1;
+    }
+    pWedo->powerA = (pWedo->A_connection_type==MOTOR)?__wedo_normalize_motor_power(valueA):pWedo->powerA;
+    pWedo->powerB = (pWedo->B_connection_type==MOTOR)?__wedo_normalize_motor_power(valueB):pWedo->powerB;
+    return __wedo_set_power(pWedo->powerA,pWedo->powerB);
+}
+
 int wedo_start_mortor(int power) {
-    return __wedo_start_mortor(power, power);
+    return __wedo_set_motor(power, power);
 }
 
 int wedo_stop_mortor() {
-    return __wedo_start_mortor(0, 0);
+    return __wedo_set_motor(0, 0);
 };
 
 int wedo_start_mortor_a(int power) {
-    return __wedo_start_mortor(power, pWedo->powerB);
+    return __wedo_set_motor(power, pWedo->powerB);
 };
 
 int wedo_stop_mortor_a() {
-    return __wedo_start_mortor(0, pWedo->powerB);
+    return __wedo_set_motor(0, pWedo->powerB);
 };
 
 int wedo_start_mortor_b(int power) {
-    return __wedo_start_mortor(pWedo->powerA, power);
+    return __wedo_set_motor(pWedo->powerA, power);
 };
 
 int wedo_stop_mortor_b() {
-    return __wedo_start_mortor(pWedo->powerA, 0);
+    return __wedo_set_motor(pWedo->powerA, 0);
 };
 
 int wedo_get_tilt(){
@@ -288,6 +318,20 @@ int wedo_get_distance(){
         return -1;
     }
     return pWedo->distance;
+}
+static int __wedo_set_light(int value) {
+    if (pWedo==NULL) {
+        return -1;
+    }
+    int powerA = (pWedo->A_connection_type==LIGHT)?__wedo_normalize_motor_power(value):pWedo->powerA;
+    int powerB = (pWedo->B_connection_type==LIGHT)?__wedo_normalize_motor_power(value):pWedo->powerB;
+    return __wedo_set_power(powerA,powerB);
+}
+int wedo_light_on() {
+    return __wedo_set_light(100);
+}
+int wedo_light_off() {
+    return __wedo_set_light(0);
 }
 
 
