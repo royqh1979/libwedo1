@@ -2,6 +2,8 @@
 
 A C Library for Lego wedo 1.0 inspired by WedoMore (https://github.com/itdaniher/WeDoMore)
 
+Licensed under Apache License 2.0
+
 Depends on libusb-1.0 (http://libusb.info/)
 
 Tested on mingw+gcc 4.7.2
