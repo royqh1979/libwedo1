@@ -10,13 +10,17 @@ int main() {
     rc=wedo_init();
     printf("init:%d\n",rc);
     //printf("dis:%d\n",wedo_get_distance());
-    rc=wedo_start_mortor(-100);
+    //rc=wedo_start_mortor(-100);
     printf("start motor:%d\n",rc);
+    rc=wedo_servo_rotate(90);
     Sleep(2000);
+    rc=wedo_servo_rotate(-45);
     rc=wedo_light_on();
     Sleep(2000);
+    rc=wedo_servo_rotate(-90);
     rc=wedo_light_off();
     Sleep(2000);
+    rc=wedo_servo_off();
     rc=wedo_light_on();
     Sleep(2000);
     rc=wedo_stop_mortor();

@@ -12,15 +12,17 @@
 #define ID_PRODUCT 0x0003
 #define WEDO_CONFIGURATION 1
 
-const int TILTSENSOR[] = {38, 39, -1};
-const int DISTANCESENSOR[] = {176, 177, 178, 179, -1};
-const int MOTORS[] = {238,231,237,239,240,230,-1};
+const int TILT_SENSORS[] = {38, 39, -1};
+const int DISTANCE_SENSORS[] = {176, 177, 178, 179, -1};
+const int MOTORS[] = {238,231,237,239,-1};
+const int SERVO_MOTORS[] = {103,102,-1};
 const int LIGHTS[] = {203,204,-1};
 enum connect_type{
     TILT_SENSOR,
     DISTANCE_SENSOR,
     MOTOR,
     LIGHT,
+    SERVO_MORTOR,
     NONE_CONNECT
 };
 typedef struct {
@@ -94,7 +96,7 @@ static int __wedo_parse_data(const int ids[],const int datas[],const int idList[
 
 static void __wedo_get_tilt(const int ids[],const int datas[]) {
     int code;
-    code = __wedo_parse_data(ids,datas,TILTSENSOR);
+    code = __wedo_parse_data(ids,datas,TILT_SENSORS);
     if (code < 0) {
         return;
     }
@@ -113,7 +115,7 @@ static void __wedo_get_tilt(const int ids[],const int datas[]) {
 
 static void __wedo_get_distance(const int ids[],const int datas[]) {
     int code;
-    code = __wedo_parse_data(ids,datas,DISTANCESENSOR);
+    code = __wedo_parse_data(ids,datas,DISTANCE_SENSORS);
     if (code < 0) {
         return;
     }
@@ -185,10 +187,10 @@ static boolean __wedo_in_list(const int id, const int idList[]) {
     return false;
 }
 static enum connect_type __wedo_check_connection_type(int id) {
-    if (__wedo_in_list(id, TILTSENSOR)){
+    if (__wedo_in_list(id, TILT_SENSORS)){
         return TILT_SENSOR;
     }
-    if (__wedo_in_list(id, DISTANCESENSOR)){
+    if (__wedo_in_list(id, DISTANCE_SENSORS)){
         return DISTANCE_SENSOR;
     }
     if (__wedo_in_list(id, MOTORS)){
@@ -196,6 +198,9 @@ static enum connect_type __wedo_check_connection_type(int id) {
     }
     if (__wedo_in_list(id, LIGHTS)){
         return LIGHT;
+    }
+    if (__wedo_in_list(id,SERVO_MOTORS)){
+        return SERVO_MORTOR;
     }
     return NONE_CONNECT;
 }
@@ -208,7 +213,7 @@ static void __wedo_check_powers() {
         printf("check failed!");
         return;
     }
-    //printf("test:%d %d\n",recv_data[3],recv_data[5]);
+    printf("test:%d %d\n",recv_data[3],recv_data[5]);
     pWedo->A_connection_type=__wedo_check_connection_type(recv_data[3]);
     pWedo->B_connection_type=__wedo_check_connection_type(recv_data[5]);
     //printf("%d %d\n",pWedo->A_connection_type,pWedo->B_connection_type);
@@ -278,9 +283,9 @@ static int __wedo_set_motor(int valueA, int valueB) {
     if (pWedo==NULL) {
         return -1;
     }
-    pWedo->powerA = (pWedo->A_connection_type==MOTOR)?__wedo_normalize_motor_power(valueA):pWedo->powerA;
-    pWedo->powerB = (pWedo->B_connection_type==MOTOR)?__wedo_normalize_motor_power(valueB):pWedo->powerB;
-    return __wedo_set_power(pWedo->powerA,pWedo->powerB);
+    int powerA = (pWedo->A_connection_type==MOTOR)?__wedo_normalize_motor_power(valueA):pWedo->powerA;
+    int powerB = (pWedo->B_connection_type==MOTOR)?__wedo_normalize_motor_power(valueB):pWedo->powerB;
+    return __wedo_set_power(powerA,powerB);
 }
 
 int wedo_start_mortor(int power) {
@@ -319,19 +324,55 @@ int wedo_get_distance(){
     }
     return pWedo->distance;
 }
-static int __wedo_set_light(int value) {
+static int __wedo_set_light(int valueA,int valueB) {
     if (pWedo==NULL) {
         return -1;
     }
-    int powerA = (pWedo->A_connection_type==LIGHT)?__wedo_normalize_motor_power(value):pWedo->powerA;
-    int powerB = (pWedo->B_connection_type==LIGHT)?__wedo_normalize_motor_power(value):pWedo->powerB;
+    int powerA = (pWedo->A_connection_type==LIGHT)?__wedo_normalize_motor_power(valueA):pWedo->powerA;
+    int powerB = (pWedo->B_connection_type==LIGHT)?__wedo_normalize_motor_power(valueB):pWedo->powerB;
     return __wedo_set_power(powerA,powerB);
 }
 int wedo_light_on() {
-    return __wedo_set_light(100);
+    return __wedo_set_light(100,100);
 }
 int wedo_light_off() {
-    return __wedo_set_light(0);
+    return __wedo_set_light(0,0);
+}
+int wedo_light_on_a() {
+    return __wedo_set_light(100,pWedo->powerB);
+}
+int wedo_light_off_a() {
+    return __wedo_set_light(0,pWedo->powerB);
+}
+int wedo_light_on_b() {
+    return __wedo_set_light(pWedo->powerA,100);
+}
+int wedo_light_off_b() {
+    return __wedo_set_light(pWedo->powerA,0);
+}
+
+static int __wedo_normalize_degree(int degree){
+    degree=degree*127/90;
+    if (degree>127) {
+        degree=127;
+    }else if (degree<-127){
+        degree=-127;
+    }
+    return degree;
+}
+static int __wedo_servo_set(int degreeA,int degreeB){
+    if (pWedo==NULL) {
+        return -1;
+    }
+    int powerA =(pWedo->A_connection_type==SERVO_MORTOR)?__wedo_normalize_degree(degreeA):pWedo->powerA;
+    int powerB =(pWedo->B_connection_type==SERVO_MORTOR)?__wedo_normalize_degree(degreeB):pWedo->powerB;
+    return __wedo_set_power(powerA,powerB);
+}
+int wedo_servo_rotate(int degree){
+    return __wedo_servo_set(degree,degree);
+}
+int wedo_servo_off(){
+    return __wedo_servo_set(0,0);
 }
 
 

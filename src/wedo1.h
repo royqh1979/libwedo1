@@ -86,6 +86,13 @@ int wedo_get_distance();
 
 int wedo_light_on();
 int wedo_light_off();
+int wedo_light_on_a();
+int wedo_light_off_a();
+int wedo_light_on_a();
+int wedo_light_off_a();
+
+int wedo_servo_rotate(int degree);
+int wedo_servo_off();
 
 /*
 int wedo_run_mortor(int power,int second);
